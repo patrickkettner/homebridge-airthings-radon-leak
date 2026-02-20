@@ -1,0 +1,83 @@
+{
+    "pluginAlias": "AirthingsHub",
+    "pluginType": "platform",
+    "singular": true,
+    "customUi": true,
+    "headerDisplay": "Airthings Hub Configuration",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "title": "Name",
+                "type": "string",
+                "default": "Airthings"
+            },
+            "clientId": {
+                "title": "Client ID",
+                "type": "string",
+                "required": true,
+                "description": "Create an API Client at https://dashboard.airthings.com/access-control-client"
+            },
+            "clientSecret": {
+                "title": "Client Secret",
+                "type": "string",
+                "required": true,
+                "description": "The secret key for your API Client"
+            },
+            "radonThreshold": {
+                "title": "Radon Threshold (Bq/m3)",
+                "type": "integer",
+                "default": 150
+            },
+            "sensors": {
+                "title": "Enabled Sensors",
+                "type": "array",
+                "default": [
+                    "radon",
+                    "battery"
+                ],
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "radon",
+                        "co2",
+                        "voc",
+                        "temp",
+                        "humidity",
+                        "battery"
+                    ]
+                }
+            },
+            "enableEveCustomCharacteristics": {
+                "title": "Enable Eve App History",
+                "type": "boolean",
+                "default": false
+            },
+            "orphanGracePeriodDays": {
+                "title": "Orphan Grace Period (Days)",
+                "type": "integer",
+                "default": 365,
+                "description": "Number of days before an unreachable accessory is automatically removed."
+            },
+            "ignoredDevices": {
+                "title": "Ignored Devices",
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "includedDevices": {
+                "title": "Included Devices",
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "debugMode": {
+                "title": "Enable Verbose Logging",
+                "type": "boolean",
+                "default": false
+            }
+        }
+    }
+}

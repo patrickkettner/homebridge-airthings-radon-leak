@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="style.css">
+  <title>Airthings Hub Configuration</title>
+</head>
+<body>
+  <div class="card card-body mt-3">
+    <h2 class="mb-4">Airthings Hub Settings</h2>
+    
+    <div class="form-group mb-3">
+      <label for="nameInput">Name</label>
+      <input type="text" class="form-control" id="nameInput" required>
+    </div>
+
+    <div class="form-group mb-3">
+      <label for="clientIdInput">Client ID</label>
+      <input type="password" class="form-control" id="clientIdInput" required>
+      <small>Create an API Client at https://dashboard.airthings.com/access-control-client</small>
+    </div>
+
+    <div class="form-group mb-4">
+      <label for="clientSecretInput">Client Secret</label>
+      <input type="password" class="form-control" id="clientSecretInput" required>
+      <small>The secret key for your API Client</small>
+    </div>
+
+    <hr>
+    
+    <h4 class="mb-3">Advanced Options</h4>
+    
+    <div class="form-group mb-3">
+      <label for="radonThresholdInput">Radon Threshold (Bq/m3)</label>
+      <input type="number" class="form-control" id="radonThresholdInput" min="0">
+    </div>
+
+    <div class="form-group mb-4">
+      <label>Enabled Sensors</label>
+      <div class="sensor-grid mt-2" id="sensorsContainer">
+        <label><input type="checkbox" value="radon"> Radon</label>
+        <label><input type="checkbox" value="co2"> CO2</label>
+        <label><input type="checkbox" value="voc"> VOC</label>
+        <label><input type="checkbox" value="temp"> Temperature</label>
+        <label><input type="checkbox" value="humidity"> Humidity</label>
+        <label><input type="checkbox" value="battery"> Battery</label>
+      </div>
+    </div>
+
+    <div class="form-group mb-3">
+      <label>
+        <input type="checkbox" id="eveUiInput"> Enable Eve App Custom Characteristics
+      </label>
+    </div>
+    
+    <div class="form-group mb-3">
+      <label>
+        <input type="checkbox" id="debugModeInput"> Enable Verbose Logging
+      </label>
+    </div>
+
+    <hr>
+
+    <div class="form-group mb-3">
+      <label for="ignoredDevicesInput">Ignored Devices (optional, comma-separated)</label>
+      <input type="text" class="form-control" id="ignoredDevicesInput" placeholder="uuid-1, uuid-2">
+    </div>
+
+    <div class="form-group mb-3">
+      <label for="includedDevicesInput">Included Devices (optional, comma-separated)</label>
+      <input type="text" class="form-control" id="includedDevicesInput" placeholder="uuid-1, uuid-2">
+    </div>
+  </div>
+
+  <div class="footer-actions mt-4 text-center">
+    <button class="btn btn-primary" id="save-button" type="button">Save Settings</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

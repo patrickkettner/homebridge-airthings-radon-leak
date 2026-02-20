@@ -1,0 +1,19 @@
+{
+  "all": true,
+  "reporter": [
+    "text",
+    "lcov",
+    "html"
+  ],
+  "src": ["src"],
+  "exclude": [
+    "test/**/*",
+    "test/**/*",
+    "dist/**/*"
+  ],
+  "check-coverage": true,
+  "lines": 100,
+  "statements": 100,
+  "functions": 100,
+  "branches": 100
+}

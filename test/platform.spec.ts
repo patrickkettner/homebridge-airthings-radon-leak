@@ -208,6 +208,9 @@ describe('AirthingsHubPlatform', () => {
 
         platform.configureAccessory(acc);
 
+        const mockWrapper = { stopPolling: sinon.stub() } as any;
+        platform['activeWrappers'].set(acc.UUID, mockWrapper);
+
         await platform.discoverDevices();
 
         // Should have set orphanedSince because device is not returned by getDevices
@@ -217,6 +220,9 @@ describe('AirthingsHubPlatform', () => {
         // Should have flagged service as faulty
         const faultVal = service.characteristics.get(mockHb.api.hap.Characteristic.StatusFault)?.value;
         expect(faultVal).to.equal(1); // GENERAL_FAULT
+
+        // Should have stopped the polling loop during grace period to prevent API spam
+        expect(mockWrapper.stopPolling.calledOnce).to.be.true;
       });
 
       it('safely recovers a returning orphaned accessory if it comes back', async () => {
@@ -235,6 +241,29 @@ describe('AirthingsHubPlatform', () => {
 
         expect(acc.context.orphanedSince).to.be.undefined;
         expect(mockHb.api.unregisterPlatformAccessories.called).to.be.false;
+      });
+
+      it('unregisters an orphaned accessory and stops polling past the grace period', async () => {
+        platform = createPlatform({ clientId: 't', clientSecret: 't', orphanGracePeriodDays: 7 });
+        getDevicesStub.resolves([]);
+
+        const acc = mockHb.api.platformAccessory('Orphan', 'uuid-dev123');
+        acc.context.device = { id: 'dev123', deviceType: 'WAVE' };
+        // Place it deep in the past to simulate time flowing past the grace period
+        acc.context.orphanedSince = Date.now() - (8 * 24 * 60 * 60 * 1000); // 8 days ago
+
+        platform.configureAccessory(acc);
+
+        // Mock a wrapper in activeWrappers to ensure stopPolling is called
+        const mockWrapper = { stopPolling: sinon.stub() } as any;
+        platform['activeWrappers'].set(acc.UUID, mockWrapper);
+
+        await platform.discoverDevices();
+
+        expect(mockHb.api.unregisterPlatformAccessories.called).to.be.true;
+        expect(mockWrapper.stopPolling.calledOnce).to.be.true;
+        expect(platform.accessories).to.have.lengthOf(0);
+        expect(platform['activeWrappers'].has(acc.UUID)).to.be.false;
       });
     });
   });

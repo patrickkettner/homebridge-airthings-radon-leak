@@ -175,6 +175,10 @@ export class AirthingsHubPlatform implements DynamicPlatformPlugin {
               service.updateCharacteristic(this.Characteristic.StatusFault, this.Characteristic.StatusFault.GENERAL_FAULT);
             }
           }
+          const wrapper = this.activeWrappers.get(cachedAccessory.UUID);
+          if (wrapper) {
+            wrapper.stopPolling();
+          }
         }
       } else {
         delete cachedAccessory.context.orphanedSince;

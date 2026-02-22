@@ -4,6 +4,7 @@ export interface AirthingsHubConfig extends PlatformConfig {
   readonly clientId: string;
   readonly clientSecret: string;
   readonly radonThreshold: number;
+  readonly radonUnit: string;
   readonly sensors: ReadonlyArray<string>;
   readonly enableEveCustomCharacteristics: boolean;
   readonly orphanGracePeriodDays: number;

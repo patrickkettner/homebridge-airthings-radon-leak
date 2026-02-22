@@ -1,12 +1,18 @@
 import { Logger } from 'homebridge';
+import { EventEmitter } from 'events';
 import { AirthingsApiClient } from './api.js';
-import { DeviceState } from './state.js';
 
-/**
- * Encapsulates the periodic fetching logic.
- * Updates the provided state object and triggers a callback on change.
- */
-export class DevicePoller {
+export interface PollerEvents {
+  'update': (data: any) => void;
+  'fault': (errMessage: string) => void;
+}
+
+export declare interface DevicePoller {
+  on<U extends keyof PollerEvents>(event: U, listener: PollerEvents[U]): this;
+  emit<U extends keyof PollerEvents>(event: U, ...args: Parameters<PollerEvents[U]>): boolean;
+}
+
+export class DevicePoller extends EventEmitter {
   private pollingInterval: NodeJS.Timeout | null = null;
   private isPolling = false;
   private consecutiveFailures = 0;
@@ -14,12 +20,12 @@ export class DevicePoller {
   constructor(
     private readonly deviceId: string,
     private readonly apiClient: AirthingsApiClient,
-    private readonly state: DeviceState,
     private readonly log: Logger,
     private readonly pollIntervalMs: number,
-    private readonly onUpdate: () => void,
     private readonly debugMode: boolean,
-  ) { }
+  ) {
+    super();
+  }
 
   public start(): void {
     if (this.isPolling) {
@@ -37,12 +43,13 @@ export class DevicePoller {
     }, jitter);
   }
 
-  public stop(): void {
+  public destroy(): void {
     this.isPolling = false;
     if (this.pollingInterval) {
       clearTimeout(this.pollingInterval);
       this.pollingInterval = null;
     }
+    this.removeAllListeners();
   }
 
   private scheduleNext(): void {
@@ -59,10 +66,6 @@ export class DevicePoller {
     }, this.pollIntervalMs);
   }
 
-  /**
-   * Fetches the latest sample and updates state directly.
-   * Does not throw; handles errors internally.
-   */
   public async poll(): Promise<void> {
     try {
       if (this.debugMode) {
@@ -73,7 +76,7 @@ export class DevicePoller {
 
       if (!sample || !sample.data || Object.keys(sample.data).length === 0) {
         this.log.warn(`API returned malformed or empty data for device ${this.deviceId}.`);
-        this.handleConsecutiveFailure();
+        this.handleConsecutiveFailure("Malformed or empty response payload");
         return;
       }
 
@@ -81,37 +84,38 @@ export class DevicePoller {
         this.log.info(`[DEBUG] Raw sample data for ${this.deviceId}: ${JSON.stringify(sample.data)}`);
       }
 
-      this.state.latestSample = sample.data;
-      this.state.isFaulted = false;
       this.consecutiveFailures = 0;
-      this.onUpdate();
+      this.emit('update', sample.data);
 
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         if (this.debugMode) {
           this.log.info(`[DEBUG] Poll request for ${this.deviceId} timed out. Will retry next cycle.`);
         }
-        this.handleConsecutiveFailure();
+        this.handleConsecutiveFailure("Request timeout");
         return;
       }
 
       const errMessage = error instanceof Error ? error.message : String(error);
-      this.log.error(`Failed to poll ${this.deviceId}: ${errMessage}`);
 
-      this.state.isFaulted = true;
-      this.consecutiveFailures = 0;
-      this.onUpdate();
+      if (errMessage.includes('status 429')) {
+        this.log.warn(`Airthings API rate limit reached (429) for ${this.deviceId}. Delaying next poll.`);
+        return;
+      }
+
+      this.log.error(`Failed to poll ${this.deviceId}: ${errMessage}`);
+      this.handleConsecutiveFailure(errMessage);
     }
   }
 
-  private handleConsecutiveFailure(): void {
+  private handleConsecutiveFailure(reason: string): void {
     this.consecutiveFailures++;
     if (this.consecutiveFailures >= 3) {
-      if (!this.state.isFaulted) {
-        this.log.warn(`Device ${this.deviceId} failed 3 consecutive polls. Marking as faulted.`);
+      const msg = `Device ${this.deviceId} failed 3 consecutive polls (Reason: ${reason}). Check internet connection. Marking as faulted.`;
+      if (this.consecutiveFailures === 3) {
+        this.log.warn(msg);
       }
-      this.state.isFaulted = true;
-      this.onUpdate();
+      this.emit('fault', msg);
     }
   }
 }

@@ -42,7 +42,10 @@ describe('AirthingsHubAccessory', () => {
     sinon.restore();
   });
 
-  function createWrapper() {
+  function createWrapper(mockPollerInstance?: any) {
+    if (mockPollerInstance) {
+      return new AirthingsHubAccessory(mockPlatform as any, mockAccessory, () => mockPollerInstance);
+    }
     return new AirthingsHubAccessory(mockPlatform as any, mockAccessory);
   }
 
@@ -75,36 +78,37 @@ describe('AirthingsHubAccessory', () => {
     });
 
     it('logs on identify event', () => {
-      mockAccessory.__triggerIdentify(); // Trigger before listeners attached to cover the empty handlers branch in the mock
+      mockAccessory.__triggerIdentify(); 
       createWrapper();
       mockAccessory.__triggerIdentify();
       expect(mockHb.logger.info.calledWithMatch(/identified/)).to.be.true;
+    });
+
+    it('binds to poller correctly without custom generator', () => {
+      expect(() => createWrapper()).to.not.throw();
     });
   });
 
   describe('Service Configuration', () => {
     it('only initializes services that are in BOTH device.sensors and config.sensors', () => {
-      mockPlatform.config.sensors = ['radon', 'co2']; // user only wants radon and co2
+      (mockPlatform.config as any).sensors = ['radon', 'co2']; 
       createWrapper();
 
-      // Should have Radon and CO2, but not VOC
       expect(mockAccessory.getService(mockHb.api.hap.Service.LeakSensor)).to.not.be.undefined;
       expect(mockAccessory.getService(mockHb.api.hap.Service.CarbonDioxideSensor)).to.not.be.undefined;
       expect(mockAccessory.getService(mockHb.api.hap.Service.AirQualitySensor)).to.be.undefined;
     });
 
     it('always enables virtual battery service if configured, regardless of hardware capabilities payload', () => {
-      mockPlatform.config.sensors = ['battery']; // user wants battery
-      mockAccessory.context.device.sensors = []; // hardware claims no sensors
+      (mockPlatform.config as any).sensors = ['battery'];
+      mockAccessory.context.device.sensors = []; 
       createWrapper();
 
-      const battLevel = mockHb.api.hap.Characteristic.BatteryLevel;
-      // Should be added
       expect(mockAccessory.getService(mockHb.api.hap.Service.Battery)).to.not.be.undefined;
     });
 
     it('sets Eve custom characteristic if enabled in config', () => {
-      mockPlatform.config.enableEveCustomCharacteristics = true;
+      (mockPlatform.config as any).enableEveCustomCharacteristics = true;
 
       const originalAddService = mockAccessory.addService;
       mockAccessory.addService = sinon.stub().callsFake((type: any, name: string) => {
@@ -116,17 +120,15 @@ describe('AirthingsHubAccessory', () => {
       createWrapper();
 
       const leakService = mockAccessory.getService(mockHb.api.hap.Service.LeakSensor);
-      // Should have bound RadonLevelCharacteristic
       expect(mockPlatform.RadonLevelCharacteristic).to.not.be.undefined;
       expect(leakService.addCharacteristic.calledWith(mockPlatform.RadonLevelCharacteristic)).to.be.true;
 
-      // Instantiate it manually to cover the constructor since we mocked addCharacteristic
       new (mockPlatform.RadonLevelCharacteristic as any)();
     });
 
     it('removes an unused service if it exists but is disabled', () => {
-      mockPlatform.config.sensors = []; // Disable everything
-      mockAccessory.addService('LeakSensor', 'Radon'); // Pre-existing service in cache
+      (mockPlatform.config as any).sensors = [];
+      mockAccessory.addService('LeakSensor', 'Radon'); 
 
       createWrapper();
 
@@ -135,131 +137,146 @@ describe('AirthingsHubAccessory', () => {
 
     it('handles missing sensors array from accessory context safely', () => {
       mockAccessory.context.device.sensors = null as any;
-      mockPlatform.config.sensors = ['radon'];
+      (mockPlatform.config as any).sensors = ['radon'];
       createWrapper();
-      // Should not initialize radon since it's missing from device hardware payload
       expect(mockAccessory.services.some((s: any) => s.characteristics.has(mockHb.api.hap.Characteristic.LeakDetected))).to.be.false;
     });
 
     it('uses the raw sensor key if not found in mapping', () => {
-      mockPlatform.config.sensors = ['customSensor'];
+      (mockPlatform.config as any).sensors = ['customSensor'];
       mockAccessory.context.device.sensors = ['customSensor'];
       createWrapper();
-      // Test evaluates branch sensorMapping[sensorKey] || sensorKey smoothly
     });
   });
 
   describe('State Updates', () => {
     let wrapper: any;
+    let mockPoller: any;
 
     beforeEach(() => {
-      wrapper = createWrapper();
+      mockPoller = {
+        on: sinon.stub(),
+        start: sinon.stub(),
+        destroy: sinon.stub()
+      };
+      wrapper = createWrapper(mockPoller);
     });
 
     it('applies fault state across all services when poller issues a fault', () => {
-      wrapper.state.isFaulted = true;
-      wrapper.onStateUpdate();
+      const faultCallback = mockPoller.on.args.find((arg: any) => arg[0] === 'fault')[1];
+      faultCallback('fault description');
 
-      // Check the fault characteristic on services
       const radonSvc = mockAccessory.services.find((s: any) => s.characteristics.get(mockHb.api.hap.Characteristic.Name)?.value === 'Radon');
-      // Mock testCharacteristic always returns true
       const char = radonSvc.characteristics.get(mockHb.api.hap.Characteristic.StatusFault);
       expect(char.value).to.equal(1); // GENERAL_FAULT
     });
 
     it('clears faults and updates multiple characteristics when data arrives', () => {
-      wrapper.state.isFaulted = false;
-      wrapper.state.latestSample = {
-        radonShortTermAvg: 200, // > 150 threshold
-        co2: 1200, // > 1000 threshold
-        voc: 300, // GOOD
+      const updateCallback = mockPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      const data = {
+        radonShortTermAvg: 200,
+        co2: 1200,
+        voc: 300, 
         temp: 22.5,
         humidity: 45.2,
-        battery: 15, // < 20
+        battery: 15, 
       };
 
-      wrapper.onStateUpdate();
+      updateCallback(data);
 
-      // Radon High -> Leak Detected
-      const radonSvc = wrapper.services.radon;
-      expect(radonSvc.getCharacteristic(mockHb.api.hap.Characteristic.LeakDetected).value).to.equal(1);
-
-      // CO2 High
-      const co2Svc = wrapper.services.co2;
-      expect(co2Svc.getCharacteristic(mockHb.api.hap.Characteristic.CarbonDioxideDetected).value).to.equal(1);
-
-      // VOC Good (2)
-      const vocSvc = wrapper.services.voc;
-      expect(vocSvc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(2);
-
-      // Battery Low
-      const battSvc = wrapper.services.battery;
-      expect(battSvc.getCharacteristic(mockHb.api.hap.Characteristic.StatusLowBattery).value).to.equal(1);
-
-      // Temp
-      const tempSvc = wrapper.services.temp;
-      expect(tempSvc.getCharacteristic(mockHb.api.hap.Characteristic.CurrentTemperature).value).to.equal(22.5);
+      expect(wrapper.services.radon.getCharacteristic(mockHb.api.hap.Characteristic.LeakDetected).value).to.equal(1);
+      expect(wrapper.services.co2.getCharacteristic(mockHb.api.hap.Characteristic.CarbonDioxideDetected).value).to.equal(1);
+      expect(wrapper.services.voc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(2);
+      expect(wrapper.services.battery.getCharacteristic(mockHb.api.hap.Characteristic.StatusLowBattery).value).to.equal(1);
+      expect(wrapper.services.temp.getCharacteristic(mockHb.api.hap.Characteristic.CurrentTemperature).value).to.equal(22.5);
     });
 
     it('handles normal CO2 and normal battery levels', () => {
-      wrapper.state.latestSample = { co2: 800, battery: 50 }; // co2 <= 1000, battery >= 20
-      wrapper.onStateUpdate();
+      const updateCallback = mockPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      updateCallback({ co2: 800, battery: 50 });
 
-      const co2Svc = wrapper.services.co2;
-      expect(co2Svc.getCharacteristic(mockHb.api.hap.Characteristic.CarbonDioxideDetected).value)
+      expect(wrapper.services.co2.getCharacteristic(mockHb.api.hap.Characteristic.CarbonDioxideDetected).value)
         .to.equal(mockHb.api.hap.Characteristic.CarbonDioxideDetected.CO2_LEVELS_NORMAL);
 
-      const battSvc = wrapper.services.battery;
-      expect(battSvc.getCharacteristic(mockHb.api.hap.Characteristic.StatusLowBattery).value)
+      expect(wrapper.services.battery.getCharacteristic(mockHb.api.hap.Characteristic.StatusLowBattery).value)
         .to.equal(mockHb.api.hap.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL);
     });
 
     it('handles excellent VOC', () => {
-      wrapper.state.latestSample = { voc: 100 };
-      wrapper.onStateUpdate();
-      expect(wrapper.services.voc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(1); // EXCELLENT
+      const updateCallback = mockPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      updateCallback({ voc: 100 });
+      expect(wrapper.services.voc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(1);
     });
 
     it('handles fair VOC', () => {
-      wrapper.state.latestSample = { voc: 800 };
-      wrapper.onStateUpdate();
-      expect(wrapper.services.voc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(3); // FAIR
+      const updateCallback = mockPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      updateCallback({ voc: 800 });
+      expect(wrapper.services.voc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(3);
     });
 
     it('handles inferior VOC', () => {
-      wrapper.state.latestSample = { voc: 1500 };
-      wrapper.onStateUpdate();
-      expect(wrapper.services.voc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(4); // INFERIOR
+      const updateCallback = mockPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      updateCallback({ voc: 1500 });
+      expect(wrapper.services.voc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(4);
     });
 
     it('handles poor VOC', () => {
-      wrapper.state.latestSample = { voc: 2500 };
-      wrapper.onStateUpdate();
-      expect(wrapper.services.voc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(5); // POOR
+      const updateCallback = mockPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      updateCallback({ voc: 2500 });
+      expect(wrapper.services.voc.getCharacteristic(mockHb.api.hap.Characteristic.AirQuality).value).to.equal(5);
     });
 
     it('fans out low battery to other services', () => {
-      wrapper.state.latestSample = { battery: 10, temp: 20 }; // Include temp so service exists
-      wrapper.onStateUpdate();
-
-      const tempSvc = wrapper.services.temp;
-      // Because we testCharacteristic->true in mock
-      expect(tempSvc.getCharacteristic(mockHb.api.hap.Characteristic.StatusLowBattery).value).to.equal(1);
+      const updateCallback = mockPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      updateCallback({ battery: 10, temp: 20 });
+      expect(wrapper.services.temp.getCharacteristic(mockHb.api.hap.Characteristic.StatusLowBattery).value).to.equal(1);
     });
 
     it('ignores empty updates gracefully', () => {
-      wrapper.state.latestSample = null;
-      expect(() => wrapper.onStateUpdate()).to.not.throw();
+      const updateCallback = mockPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      expect(() => updateCallback(null)).to.not.throw();
     });
 
     it('updates eve custom radon characteristic if enabled', () => {
-      mockPlatform.config.enableEveCustomCharacteristics = true;
-      const eveWrapper = createWrapper() as any;
+      (mockPlatform.config as any).enableEveCustomCharacteristics = true;
+      const freshPoller = {
+        on: sinon.stub(),
+        start: sinon.stub(),
+        destroy: sinon.stub()
+      };
+      const eveWrapper = createWrapper(freshPoller) as any;
 
-      eveWrapper.state.latestSample = { radonShortTermAvg: 123 };
-      eveWrapper.onStateUpdate();
+      const updateCallback = freshPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      updateCallback({ radonShortTermAvg: 123 });
 
       expect(eveWrapper.services.radon.getCharacteristic(eveWrapper.customRadonLevelChar).value).to.equal(123);
+    });
+
+    it('translates presentation value to pCi/L if configured', () => {
+      (mockPlatform.config as any).enableEveCustomCharacteristics = true;
+      (mockPlatform.config as any).radonUnit = 'pCi/L';
+      const freshPoller = {
+        on: sinon.stub(),
+        start: sinon.stub(),
+        destroy: sinon.stub()
+      };
+      const eveWrapper = createWrapper(freshPoller) as any;
+
+      const updateCallback = freshPoller.on.args.find((arg: any) => arg[0] === 'update')[1];
+      updateCallback({ radonShortTermAvg: 148 });
+
+      expect(eveWrapper.services.radon.getCharacteristic(eveWrapper.customRadonLevelChar).value).to.equal(4);
+    });
+
+    it('stopPolling correctly delegates to poller destroy', () => {
+      wrapper.stopPolling();
+      expect(mockPoller.destroy.calledOnce).to.be.true;
+    });
+
+    it('safely handles missing service in updateCharIfChanged', () => {
+      expect(() => {
+        (wrapper as any).updateCharIfChanged(undefined, mockHb.api.hap.Characteristic.Name, 'test');
+      }).to.not.throw();
     });
   });
 });

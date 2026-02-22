@@ -23,6 +23,7 @@ export class AirthingsApiClient {
     private readonly clientSecret: string,
     private readonly log: Logger,
     private readonly debugMode: boolean,
+    private readonly customFetch?: typeof fetch,
   ) { }
 
   /**
@@ -90,8 +91,9 @@ export class AirthingsApiClient {
   private async fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
+    const fetchFn = this.customFetch || fetch;
     try {
-      return await fetch(url, { ...options, signal: controller.signal });
+      return await fetchFn(url, { ...options, signal: controller.signal });
     } finally {
       clearTimeout(timeout);
     }

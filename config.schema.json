@@ -1,9 +1,10 @@
 {
     "pluginAlias": "AirthingsHub",
     "pluginType": "platform",
+    "headerDisplay": "Please create an API Client at https://dashboard.airthings.com/access-control-client to continue.",
+    "footerDisplay": "For advanced troubleshooting, check the logs or consult the README.",
     "singular": true,
     "customUi": true,
-    "headerDisplay": "Airthings Hub Configuration",
     "schema": {
         "type": "object",
         "properties": {
@@ -16,7 +17,8 @@
                 "title": "Client ID",
                 "type": "string",
                 "required": true,
-                "description": "Create an API Client at https://dashboard.airthings.com/access-control-client"
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                "description": "Create an API Client at https://dashboard.airthings.com/access-control-client (Must be a valid UUID)"
             },
             "clientSecret": {
                 "title": "Client Secret",
@@ -25,9 +27,21 @@
                 "description": "The secret key for your API Client"
             },
             "radonThreshold": {
-                "title": "Radon Threshold (Bq/m3)",
+                "title": "Radon Threshold",
                 "type": "integer",
-                "default": 150
+                "default": 150,
+                "minimum": 0,
+                "description": "Threshold at which a Radon leak is detected."
+            },
+            "radonUnit": {
+                "title": "Radon Unit (Presentation Only)",
+                "type": "string",
+                "default": "Bq/m3",
+                "enum": [
+                    "Bq/m3",
+                    "pCi/L"
+                ],
+                "description": "Select the unit for Radon characteristics (1 pCi/L = 37 Bq/m3)."
             },
             "sensors": {
                 "title": "Enabled Sensors",
@@ -57,20 +71,22 @@
                 "title": "Orphan Grace Period (Days)",
                 "type": "integer",
                 "default": 365,
-                "description": "Number of days before an unreachable accessory is automatically removed."
+                "description": "Number of days before an unreachable accessory is automatically removed. Set to 0 to explicitly disable automatic removal."
             },
             "ignoredDevices": {
                 "title": "Ignored Devices",
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "title": "Device ID (UUID)"
                 }
             },
             "includedDevices": {
                 "title": "Included Devices",
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "title": "Device ID (UUID)"
                 }
             },
             "debugMode": {

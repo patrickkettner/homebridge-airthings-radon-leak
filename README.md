@@ -36,9 +36,10 @@ If you are configuring manually, add the following to your `config.json` inside 
   "clientId": "YOUR_CLIENT_ID",
   "clientSecret": "YOUR_CLIENT_SECRET",
   "radonThreshold": 150,
+  "radonUnit": "Bq/m3",
   "sensors": ["radon", "battery"],
   "enableEveCustomCharacteristics": false,
-  "orphanGracePeriodDays": 365
+  "orphanGracePeriodDays": 14
 }
 ```
 
@@ -50,10 +51,11 @@ If you are configuring manually, add the following to your `config.json` inside 
 | `name` | string | No | `Airthings` | The name of the platform. |
 | `clientId` | string | Yes | | The Client ID from your Airthings dashboard. |
 | `clientSecret` | string | Yes | | The Client Secret from your Airthings dashboard. |
-| `radonThreshold` | number | No | `150` | The Radon level (in Bq/m³) at which a Leak sensor is triggered in HomeKit. According to the WHO, the actionable limit is usually 100-150 Bq/m³. |
+| `radonThreshold` | number | No | `150` | The Radon level at which a Leak sensor is triggered in HomeKit. Evaluated against the raw Bq/m3 API value (150 Bq/m3 ≈ 4.0 pCi/L). |
+| `radonUnit` | string | No | `Bq/m3` | (Presentation Only) Select `Bq/m3` or `pCi/L` for displaying Radon levels in apps that support custom characteristics (like Eve). |
 | `sensors` | array | No | `["radon", "battery"]` | An array of sensors to expose to HomeKit. Valid options include: `radon`, `co2`, `voc`, `temp`, `humidity`, `battery`. |
-| `enableEveCustomCharacteristics` | boolean | No | `false` | Enable to expose the exact raw Radon Level (in Bq/m³) as a custom characteristic viewable in the Eve app. |
-| `orphanGracePeriodDays` | number | No | `365` | Days to retain offline accessories before removing them from your Homebridge cache. |
+| `enableEveCustomCharacteristics` | boolean | No | `false` | Enable to expose the exact raw Radon Level as a custom characteristic viewable in the Eve app. |
+| `orphanGracePeriodDays` | number | No | `14` | Days to retain offline accessories before removing them from your Homebridge cache. |
 | `ignoredDevices` | array | No | `[]` | List of device IDs (serial numbers) to ignore. |
 | `includedDevices` | array | No | `[]` | List of device IDs to strictly include. If populated, devices not in this list will be ignored. |
 | `debugMode` | boolean | No | `false` | Enables verbose HTTP tracing and diagnostics. |
@@ -64,3 +66,15 @@ If you are configuring manually, add the following to your `config.json` inside 
 - Airthings Wave Radon
 
 *Note: The Airthings Hub is required to expose BLE devices to the Airthings Cloud.*
+
+## Troubleshooting
+
+### Eve App Custom Characteristics Not Showing Up
+If you enable Eve App custom characteristics but they do not appear in the Eve App:
+1. Ensure the `enableEveCustomCharacteristics` option is checked in your config.
+2. Force close the Eve app.
+3. If they still do not appear, you may need to clear your Homebridge accessory cache, as HomeKit firmly caches characteristic UUIDs upon initial pairing.
+
+### "No Response" or "API Rate Limit" Warnings
+The Airthings API strictly enforces rate limits. The plugin employs caching, backoff, and startup jitter to avoid hitting these. 
+If you see rate limit errors in your logs, ensure you are not running multiple Homebridge instances against the same API client, or polling heavily with external tools concurrently.
